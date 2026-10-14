@@ -47,7 +47,7 @@ def build_stage(path, rank, split, device, dtype):
     index = json.load(open(os.path.join(path, "model.safetensors.index.json")))["weight_map"]
     state = {}
     for f in sorted(set(index.values())):
-        with safe_open(os.path.join(path, f), framework="pt", device=str(device)) as sf:
+        with safe_open(os.path.join(path, f), framework="pt", device="cpu") as sf:
             for k in sf.keys():
                 if not k.startswith(PREFIX):
                     continue
@@ -61,7 +61,7 @@ def build_stage(path, rank, split, device, dtype):
                     pass  # rank 0 embeds, rank 1 uses it as tied lm_head
                 elif name.startswith("norm") and rank == 0:
                     continue
-                state[name] = sf.get_tensor(k).to(dtype)
+                state[name] = sf.get_tensor(k).to(device, dtype)
 
     missing, unexpected = model.load_state_dict(state, strict=False)
     missing = [m for m in missing if not (rank == 0 and m.startswith("norm"))]
@@ -97,7 +97,9 @@ def main():
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--thinking", action="store_true")
-    ap.add_argument("--backend", default="nccl", choices=["nccl", "gloo"])
+    ap.add_argument("--backend", default="gloo", choices=["gloo", "nccl"],
+                    help="gloo works between any two machines; nccl needs NVIDIA GPUs on both")
+    ap.add_argument("--device", default="auto", help="auto | cuda | mps | cpu")
     args = ap.parse_args()
 
     # works under srun (SLURM_*) or torchrun / manual env (RANK, WORLD_SIZE, MASTER_ADDR, MASTER_PORT)
@@ -106,8 +108,12 @@ def main():
     assert world == 2, "this script is written for exactly two stages"
     dist.init_process_group(args.backend, rank=rank, world_size=world)
 
-    device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0)))
-    torch.cuda.set_device(device)
+    if args.device == "auto":
+        args.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    device = torch.device(args.device)
+    if device.type == "cuda":
+        device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0)))
+        torch.cuda.set_device(device)
     comm = device if args.backend == "nccl" else torch.device("cpu")
     dtype = torch.bfloat16
 
@@ -116,7 +122,7 @@ def main():
     t0 = time.time()
     model, cfg, lm_head = build_stage(path, rank, args.split, device, dtype)
     print(f"[rank {rank} @ {os.uname().nodename}] {cfg.num_hidden_layers} layers loaded in "
-          f"{time.time() - t0:.1f}s, {torch.cuda.memory_allocated(device) / 2**30:.2f} GiB", flush=True)
+          f"{time.time() - t0:.1f}s on {device}", flush=True)
 
     gen_cfg = json.load(open(os.path.join(path, "config.json"))).get("text_config", {})
     eos = {tok.eos_token_id, tok.convert_tokens_to_ids("<|im_end|>"), gen_cfg.get("eos_token_id")} - {None}

@@ -9,11 +9,19 @@ Pipeline-parallel inference of Qwen3.5-4B split across two machines.
 sbatch run_2node.sbatch --prompt "your prompt" --max-new-tokens 200
 ```
 
-Outside SLURM, on each machine:
+Two separate machines (laptops, servers, anything that can reach each other over the network):
 
 ```bash
-MASTER_ADDR=<machine A ip> MASTER_PORT=29531 WORLD_SIZE=2 RANK=0 python pp_infer.py   # machine A
-MASTER_ADDR=<machine A ip> MASTER_PORT=29531 WORLD_SIZE=2 RANK=1 python pp_infer.py   # machine B
+pip install torch "transformers>=5.8" safetensors huggingface_hub
+
+# machine A (rank 0) - its IP must be reachable from B, port 29500 open
+MASTER_ADDR=<A's ip> MASTER_PORT=29500 WORLD_SIZE=2 RANK=0 python pp_infer.py --prompt "hi"
+# machine B (rank 1)
+MASTER_ADDR=<A's ip> MASTER_PORT=29500 WORLD_SIZE=2 RANK=1 python pp_infer.py --prompt "hi"
 ```
+
+Each machine picks cuda / mps / cpu automatically (`--device` to override). Default backend is
+gloo, which works over plain TCP; use `--backend nccl` only when both sides have NVIDIA GPUs.
+If gloo binds the wrong network interface, set `GLOO_SOCKET_IFNAME` (e.g. `en0`, `wlan0`).
 
 `reference.py` runs the full model on one GPU for comparison.

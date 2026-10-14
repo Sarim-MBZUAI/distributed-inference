@@ -17,4 +17,4 @@ export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-ens5f0np0}
 PY=${PY:-$HOME/anaconda3/envs/wiki-vllm/bin/python}
 
 cd "$SLURM_SUBMIT_DIR"
-srun --kill-on-bad-exit=1 bash -c 'RANK=$SLURM_PROCID LOCAL_RANK=0 '"$PY"' pp_infer.py "$@"' _ "$@"
+srun --kill-on-bad-exit=1 bash -c 'RANK=$SLURM_PROCID LOCAL_RANK=0 '"$PY"' pp_infer.py --backend nccl "$@"' _ "$@"
