@@ -8,9 +8,9 @@ re-indexed from 0, so the HF cache / mask code works unchanged per stage.
 """
 
 import argparse
-import glob
 import json
 import os
+import socket
 import time
 
 import torch
@@ -121,7 +121,7 @@ def main():
     tok = AutoTokenizer.from_pretrained(path)
     t0 = time.time()
     model, cfg, lm_head = build_stage(path, rank, args.split, device, dtype)
-    print(f"[rank {rank} @ {os.uname().nodename}] {cfg.num_hidden_layers} layers loaded in "
+    print(f"[rank {rank} @ {socket.gethostname()}] {cfg.num_hidden_layers} layers loaded in "
           f"{time.time() - t0:.1f}s on {device}", flush=True)
 
     gen_cfg = json.load(open(os.path.join(path, "config.json"))).get("text_config", {})
