@@ -9,12 +9,5 @@
 #SBATCH --time=0:30:00
 #SBATCH --output=logs/pp-%j.log
 
-# one task per node: rank 0 on the first node, rank 1 on the second
-export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)
-export MASTER_PORT=${MASTER_PORT:-29531}
-export WORLD_SIZE=2
-export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-ens5f0np0}
-PY=${PY:-$HOME/anaconda3/envs/wiki-vllm/bin/python}
-
-cd "$SLURM_SUBMIT_DIR"
-srun --kill-on-bad-exit=1 bash -c 'RANK=$SLURM_PROCID LOCAL_RANK=0 '"$PY"' pp_infer.py --backend nccl "$@"' _ "$@"
+export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1) MASTER_PORT=29531 WORLD_SIZE=2
+srun bash -c 'RANK=$SLURM_PROCID '"${PY:-$HOME/anaconda3/envs/wiki-vllm/bin/python}"' pp_infer.py --device cuda "$@"' _ "$@"
